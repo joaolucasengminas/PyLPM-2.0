@@ -76,7 +76,8 @@ def plot_hscat(store, lagsize, lagmultiply, figsize=(800, 800)):
     statistics_text = ""
 
     for j, i in enumerate(store):
-        if len(i[0]) != 0:
+        # CORREÇÃO: Exige > 1 para que a estatística de linregress não falhe
+        if len(i[0]) > 1:
             slope, intercept, r_value, p_value, std_err = stats.linregress(i[0], i[1])
             statistics_text += f"rho ({np.round(r_value,2)}) / distance {distance[j]} <br>"
             x_val = np.linspace(0, np.max(i[0]), 100)
@@ -88,10 +89,12 @@ def plot_hscat(store, lagsize, lagmultiply, figsize=(800, 800)):
             x=i[0], y=i[1], mode='markers', name=f'Lag {distance[j]}',
             marker=dict(opacity=0.6)
         ))
-        fig.add_trace(go.Scatter(
-            x=x_val, y=y_val, mode='lines', name=f'Reg: {distance[j]}',
-            line=dict(width=3, dash='dash')
-        ))
+        
+        if len(x_val) > 0:
+            fig.add_trace(go.Scatter(
+                x=x_val, y=y_val, mode='lines', name=f'Reg: {distance[j]}',
+                line=dict(width=3, dash='dash')
+            ))
 
     fig.update_layout(
         title='H-Scatterplots',
