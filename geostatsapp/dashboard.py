@@ -64,11 +64,11 @@ def renderizar_eda():
             df = gslib.read_gslib(file_data.value)
             cols = df.columns.tolist()
             
-            # Alimenta as listas de opções de ambas as abas
+            # Alimenta as listas de opções
             x_col.options = y_col.options = var_uni.options = cols
             var_bi_x.options = var_bi_y.options = cols
             
-            # Tenta inferir seleções padrões inteligentes
+            # Inferência de seleções padrões
             if 'X' in cols: x_col.value = 'X'
             if 'Y' in cols: y_col.value = 'Y'
             if len(cols) > 2: 
@@ -78,11 +78,27 @@ def renderizar_eda():
                 var_bi_y.value = cols[3]
             
             geo_state['df'] = df
-            status_text.object = "**Status:** ✅ Dados lidos! Navegue pelas abas abaixo e gere os gráficos."
+            
+            # --- CORREÇÃO: Salva no estado global imediatamente! ---
+            geo_state['x_col'] = x_col.value
+            geo_state['y_col'] = y_col.value
+            geo_state['var_col'] = var_uni.value
+            
+            status_text.object = "**Status:** ✅ Dados lidos! Você já pode ir direto para a Variografia ou gerar os gráficos abaixo."
         except Exception as e:
             status_text.object = f"**Status:** ❌ Erro: {e}"
     load_btn.on_click(carregar_dados)
 
+    # --- CORREÇÃO: Listeners automáticos (Watchers) ---
+    # Se o usuário mudar a caixinha na interface, atualiza a memória silenciosamente
+    def atualizar_x(event): geo_state['x_col'] = event.new
+    def atualizar_y(event): geo_state['y_col'] = event.new
+    def atualizar_var(event): geo_state['var_col'] = event.new
+
+    x_col.param.watch(atualizar_x, 'value')
+    y_col.param.watch(atualizar_y, 'value')
+    var_uni.param.watch(atualizar_var, 'value')
+    
     def gerar_uni(event):
         if geo_state['df'] is None: return
         status_text.object = "**Status:** ⏳ Desenhando Mapa e Histograma..."
@@ -213,10 +229,13 @@ def renderizar_variografia():
         pane_var.object = fig
 
     def btn_calc_var(event):
-        if geo_state['df'] is None: return
+        # --- TRAVA DE SEGURANÇA ---
+        if geo_state['df'] is None or geo_state['x_col'] is None: 
+            status_var.object = "⚠️ **Aviso:** Volte na Aba 1, carregue o dataset e certifique-se de que as coordenadas X e Y estão selecionadas!"
+            return
+            
         status_var.object = "⏳ Calculando Variogramas..."
-        try:
-            df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
+        # ... (resto do seu código continua igual)
             
             # Interpreta a lista de azimutes do usuário
             azm_list = [float(a.strip()) for a in azm_input.value.split(',')]
