@@ -114,69 +114,97 @@ def renderizar_variografia():
     type_var = pn.widgets.Select(name='Função', options=['Variogram', 'Covariogram', 'Correlogram', 'Non_Ergodic_Correlogram', 'PairWise', 'Relative_Variogram'], value='Variogram', width=200)
     nlag = pn.widgets.IntInput(name='N Lags', value=15, start=1, width=100)
     xlag = pn.widgets.FloatInput(name='Lag Size', value=10.0, start=0.1, width=100)
-    azm = pn.widgets.FloatInput(name='Azimute', value=0.0, start=0.0, end=360.0, width=100)
+    
+    # A MÁGICA: Múltiplos Azimutes separados por vírgula!
+    azm_input = pn.widgets.TextInput(name='Azimutes (ex: 0, 45, 90)', value='0, 90', width=180)
+    
     atol = pn.widgets.FloatInput(name='Tol. Azim', value=22.5, start=0.0, end=90.0, width=100)
     bandwh = pn.widgets.FloatInput(name='Bandwidth', value=1000.0, start=0.0, width=100)
     omni_check = pn.widgets.Checkbox(name='Omnidirecional', value=False)
     flipped_check = pn.widgets.Checkbox(name='Flipped (1-Val)', value=False)
     
-    # Botões de Ação para as Abas
-    run_var_btn = pn.widgets.Button(name='🚀 Calcular Variograma', button_type='primary', width=200)
+    # Botões de Ação
+    run_var_btn = pn.widgets.Button(name='🚀 Calcular Variogramas', button_type='primary', width=200)
     run_varmap_btn = pn.widgets.Button(name='🎯 Gerar Varmap (Lento)', button_type='warning', width=200)
     run_hscat_btn = pn.widgets.Button(name='☁️ Gerar H-Scatter', button_type='primary', width=200)
     
     step_varmap = pn.widgets.IntInput(name='Passo Angular (°)', value=15, width=120)
+    lags_hscat = pn.widgets.TextInput(name='Lags para H-Scatter (ex: 1, 2, 3)', value='1, 2, 3', width=220)
 
-    # 2. Widgets Teóricos
+    # 2. Widgets Teóricos (Adicionado Anisotropia para Projetar as Curvas)
     enable_model = pn.widgets.Checkbox(name='Habilitar Modelo Teórico', value=False)
     mod_nugget = pn.widgets.FloatSlider(name='Efeito Pepita (C0)', start=0.0, end=1.0, value=0.0, step=0.01)
+    mod_azm = pn.widgets.FloatSlider(name='Azimute Maior Continuidade', start=0.0, end=360.0, value=0.0, step=1.0)
     mod_s1_type = pn.widgets.Select(name='Estrutura 1', options=['Spherical', 'Exponential', 'Gaussian'], value='Spherical', width=120)
     mod_s1_cc = pn.widgets.FloatSlider(name='Contribuição (C1)', start=0.0, end=1.0, value=0.5, step=0.01)
-    mod_s1_a = pn.widgets.FloatSlider(name='Alcance (a1)', start=0.0, end=100.0, value=10.0, step=1.0)
-    controles_teoricos = pn.Column(mod_nugget, pn.Row(mod_s1_type, mod_s1_cc, mod_s1_a), visible=False)
-
-    status_var = pn.pane.Markdown("**Status:** Ajuste os parâmetros e escolha a aba desejada.", styles={'color': '#0056b3'})
+    mod_s1_a_max = pn.widgets.FloatSlider(name='Alcance Maior (Dir Principal)', start=0.0, end=100.0, value=10.0, step=1.0)
+    mod_s1_a_min = pn.widgets.FloatSlider(name='Alcance Menor (Ortogonal)', start=0.0, end=100.0, value=10.0, step=1.0)
     
-    # Painéis
+    controles_teoricos = pn.Column(mod_nugget, pn.Row(mod_azm, mod_s1_a_max, mod_s1_a_min), pn.Row(mod_s1_type, mod_s1_cc), visible=False)
+
+    status_var = pn.pane.Markdown("**Status:** Ajuste os parâmetros.", styles={'color': '#0056b3'})
+    
+    # Painéis (Note que o Varmap agora é um Matplotlib Pane!)
     pane_var = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
-    pane_varmap = pn.pane.Plotly(sizing_mode="stretch_both", min_height=600)
+    pane_varmap = pn.pane.Matplotlib(sizing_mode="stretch_both", min_height=700, tight=True)
     pane_hscat = pn.pane.Plotly(sizing_mode="stretch_both", min_height=600)
 
     # --- Callbacks ---
-    @pn.depends(mod_nugget.param.value_throttled, mod_s1_type, mod_s1_cc.param.value_throttled, mod_s1_a.param.value_throttled, enable_model, watch=True)
+    @pn.depends(mod_nugget.param.value_throttled, mod_azm.param.value_throttled, mod_s1_type, mod_s1_cc.param.value_throttled, mod_s1_a_max.param.value_throttled, mod_s1_a_min.param.value_throttled, enable_model, watch=True)
     def atualizar_plot_teorico(*args):
-        df_exp = geo_state.get('df_exp')
-        if df_exp is None or df_exp.empty: return
+        df_exp_list = geo_state.get('df_exp_list')
+        azm_list = geo_state.get('azm_list')
+        if not df_exp_list: return
+        
         controles_teoricos.visible = enable_model.value
         
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_exp['Average distance'], y=df_exp['Spatial continuity'], mode='markers', name='Experimental', marker=dict(size=10, color=df_exp['Number of pairs'], colorscale='Viridis', showscale=True), text=df_exp['Number of pairs']))
+        # Redesenha todos os variogramas experimentais primeiro
+        fig = plots.plot_experimental_variogram(df_exp_list, azm_list, [0.0]*len(azm_list))
         
+        # Injeta as curvas teóricas projetadas em cada subplot
         if enable_model.value:
-            df_teorico = variografia.calcular_modelo_teorico(
-                experimental_dataframe=df_exp, azimuth=azm.value, dip=0.0, rotation_reference=[azm.value, 0, 0], 
-                model_func=[mod_s1_type.value], ranges=[[mod_s1_a.value, mod_s1_a.value, mod_s1_a.value]], 
-                contribution=[mod_s1_cc.value], nugget=mod_nugget.value, inverted=False
-            )
-            fig.add_trace(go.Scatter(x=df_teorico['distances'], y=df_teorico['model'], mode='lines', name='Teórico', line=dict(color='red', width=3)))
-        
-        fig.update_layout(title=f"Variograma ({type_var.value})", xaxis_title="Distância (h)", yaxis_title="\u03B3 (h)", template="plotly_white")
+            count_row, count_cols = 1, 1
+            for i, (df_exp, azm_plot) in enumerate(zip(df_exp_list, azm_list)):
+                df_teorico = variografia.calcular_modelo_teorico(
+                    experimental_dataframe=df_exp, azimuth=azm_plot, dip=0.0, 
+                    rotation_reference=[mod_azm.value, 0, 0], model_func=[mod_s1_type.value], 
+                    ranges=[[mod_s1_a_max.value, mod_s1_a_min.value, mod_s1_a_max.value]], # Y(Max), X(Min), Z
+                    contribution=[mod_s1_cc.value], nugget=mod_nugget.value, inverted=False
+                )
+                fig.add_trace(go.Scatter(x=df_teorico['distances'], y=df_teorico['model'], mode='lines', name=f'Teórico {azm_plot}°', line=dict(color='red', width=3)), row=count_row, col=count_cols)
+                
+                count_cols += 1
+                if count_cols > 4: count_cols = 1; count_row += 1
+                
         pane_var.object = fig
 
     def btn_calc_var(event):
         if geo_state['df'] is None: return
-        status_var.object = "⏳ Calculando Variograma..."
+        status_var.object = "⏳ Calculando Variogramas..."
         try:
             df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
-            res = variografia.experimental(df.copy(), x, y, v, v, [type_var.value], [nlag.value], [xlag.value], [xlag.value/2.0], [atol.value], [90.0], [bandwh.value], [1000.0], [azm.value], [0.0], [omni_check.value], [flipped_check.value], Z=None)
-            geo_state['df_exp'] = res['Values'][0]
-            if geo_state['df_exp'].empty: status_var.object = "⚠️ Sem pares."; return
             
-            max_g = geo_state['df_exp']['Spatial continuity'].max()
-            max_d = geo_state['df_exp']['Average distance'].max()
-            mod_nugget.end, mod_s1_cc.end, mod_s1_a.end = float(max_g*1.5), float(max_g*1.5), float(max_d*1.5)
+            # Interpreta a lista de azimutes do usuário
+            azm_list = [float(a.strip()) for a in azm_input.value.split(',')]
+            ndir = len(azm_list)
+            
+            # Executa N direções de uma vez!
+            res = variografia.experimental(
+                df.copy(), x, y, v, v, [type_var.value]*ndir, [nlag.value]*ndir, [xlag.value]*ndir, 
+                [xlag.value/2.0]*ndir, [atol.value]*ndir, [90.0]*ndir, [bandwh.value]*ndir, 
+                [1000.0]*ndir, azm_list, [0.0]*ndir, [omni_check.value]*ndir, [flipped_check.value]*ndir, Z=None
+            )
+            geo_state['df_exp_list'] = res['Values']
+            geo_state['azm_list'] = azm_list
+            
+            # Atualiza os limites dos sliders baseado no maior variograma
+            max_g = max([d['Spatial continuity'].max() for d in geo_state['df_exp_list'] if not d.empty])
+            max_d = max([d['Average distance'].max() for d in geo_state['df_exp_list'] if not d.empty])
+            mod_nugget.end, mod_s1_cc.end = float(max_g*1.5), float(max_g*1.5)
+            mod_s1_a_max.end, mod_s1_a_min.end = float(max_d*1.5), float(max_d*1.5)
+            
             atualizar_plot_teorico()
-            status_var.object = "✅ Variograma concluído!"
+            status_var.object = "✅ Múltiplos Variogramas calculados!"
         except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
     run_var_btn.on_click(btn_calc_var)
 
@@ -186,6 +214,7 @@ def renderizar_variografia():
         try:
             df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
             df_vm = variografia.calcular_varmap_data(df.copy(), x, y, v, v, type_var.value, nlag.value, xlag.value, xlag.value/2.0, atol.value, 90.0, bandwh.value, 1000.0, dip=0.0, step_angulo=step_varmap.value, Z=None, flipped=flipped_check.value)
+            
             pane_varmap.object = plots.plot_varmap(df_vm, title=f"Varmap ({type_var.value})")
             status_var.object = "✅ Varmap gerado!"
         except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
@@ -195,32 +224,38 @@ def renderizar_variografia():
         if geo_state['df'] is None: return
         status_var.object = "⏳ Extraindo pares para o H-Scatterplot..."
         try:
+            # Pega o primeiro Azimute da lista para o H-scatter
+            azm_ref = float(azm_input.value.split(',')[0].strip())
             df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
-            h_data = variografia.calcular_hscatter_data(df.copy(), x, y, v, v, nlag.value, xlag.value, xlag.value/2.0, atol.value, 90.0, bandwh.value, 1000.0, azm.value, 0.0, omni_check.value, Z=None)
+            h_data = variografia.calcular_hscatter_data(df.copy(), x, y, v, v, nlag.value, xlag.value, xlag.value/2.0, atol.value, 90.0, bandwh.value, 1000.0, azm_ref, 0.0, omni_check.value, Z=None)
+            
+            # Filtra apenas os lags que o usuário pediu!
+            try: lags_to_plot = [int(l.strip()) for l in lags_hscat.value.split(',')]
+            except: lags_to_plot = [1, 2, 3] 
             
             store, lagmult = [], []
-            for i in range(1, nlag.value + 1):
+            for i in lags_to_plot:
                 lk = f'Lag_{i}'
                 if lk in h_data and h_data[lk]['n_pares'] > 0:
                     store.append([h_data[lk]['head'], h_data[lk]['tail']])
                     lagmult.append(i)
                     
             pane_hscat.object = plots.plot_hscat(store, xlag.value, lagmult)
-            status_var.object = "✅ H-Scatter gerado!"
+            status_var.object = f"✅ H-Scatter gerado para o Azimute {azm_ref}°!"
         except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
     run_hscat_btn.on_click(btn_calc_hscat)
 
     # Sub-abas da Variografia
     tabs_var = pn.Tabs(
-        ('📈 Variograma', pn.Column(run_var_btn, enable_model, controles_teoricos, pane_var)),
+        ('📈 Múltiplos Variogramas', pn.Column(run_var_btn, enable_model, controles_teoricos, pane_var)),
         ('🎯 Varmap', pn.Column(pn.Row(step_varmap, run_varmap_btn), pane_varmap)),
-        ('☁️ H-Scatter', pn.Column(run_hscat_btn, pane_hscat)),
+        ('☁️ H-Scatter', pn.Column(pn.Row(lags_hscat, run_hscat_btn), pane_hscat)),
         dynamic=True
     )
 
     return pn.Column(
         "## 📈 2. Continuidade Espacial",
-        pn.Row(type_var, nlag, xlag, azm, atol, bandwh),
+        pn.Row(type_var, nlag, xlag, azm_input, atol, bandwh),
         pn.Row(omni_check, flipped_check),
         status_var, pn.layout.Divider(), tabs_var,
         styles={'background': '#f9f9f9', 'padding': '20px', 'border-radius': '10px'}
