@@ -30,30 +30,28 @@ def listar_arquivos_dat():
 # MÓDULO 1: INTERFACE DA ANÁLISE EXPLORATÓRIA (EDA)
 # ==============================================================================
 def renderizar_eda():
+    # --- Controles Globais (Upload de Dados) ---
     refresh_btn = pn.widgets.Button(name='🔄 Atualizar Lista', button_type='default', width=150)
     file_data = pn.widgets.Select(name="Selecione o Dataset (GSLIB)", options=[''] + listar_arquivos_dat())
     load_btn = pn.widgets.Button(name='Ler Dataset', button_type='primary', width=150)
-    
-    x_col = pn.widgets.Select(name='Coordenada X', options=[])
-    y_col = pn.widgets.Select(name='Coordenada Y', options=[])
-    var_col = pn.widgets.Select(name='Variável Principal', options=[])
-    var_sec = pn.widgets.Select(name='Variável Secundária (Para Scatter/QQ)', options=[])
-    eda_btn = pn.widgets.Button(name='Gerar EDA', button_type='success', width=150)
     status_text = pn.pane.Markdown("**Status:** Aguardando arquivo...", styles={'color': '#0056b3'})
     
-    # Painéis de Plotagem
-    pane_mapa = pn.pane.Plotly(sizing_mode="stretch_both")
-    pane_hist = pn.pane.Plotly(sizing_mode="stretch_both")
-    pane_scatter = pn.pane.Plotly(sizing_mode="stretch_both")
-    pane_qq = pn.pane.Plotly(sizing_mode="stretch_both")
+    # --- Controles da Aba 1: Univariada ---
+    x_col = pn.widgets.Select(name='Coordenada X', options=[])
+    y_col = pn.widgets.Select(name='Coordenada Y', options=[])
+    var_uni = pn.widgets.Select(name='Variável Principal', options=[])
+    btn_uni = pn.widgets.Button(name='📊 Gerar Univariada', button_type='success', width=150)
+    pane_mapa = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
+    pane_hist = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
 
-    # Abas da EDA
-    tabs_eda = pn.Tabs(
-        ('📍 Mapa & Histograma', pn.Row(pane_mapa, pane_hist, min_height=450)),
-        ('📉 Dispersão & QQ-Plot', pn.Row(pane_scatter, pane_qq, min_height=450)),
-        dynamic=True
-    )
+    # --- Controles da Aba 2: Bivariada ---
+    var_bi_x = pn.widgets.Select(name='Variável X (Eixo X)', options=[])
+    var_bi_y = pn.widgets.Select(name='Variável Y (Eixo Y)', options=[])
+    btn_bi = pn.widgets.Button(name='📉 Gerar Bivariada', button_type='success', width=150)
+    pane_scatter = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
+    pane_qq = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
 
+    # --- Callbacks ---
     def atualizar_lista(event):
         file_data.options = [''] + listar_arquivos_dat()
         status_text.object = "**Status:** 🔄 Lista atualizada!"
@@ -65,44 +63,80 @@ def renderizar_eda():
         try:
             df = gslib.read_gslib(file_data.value)
             cols = df.columns.tolist()
-            x_col.options = y_col.options = var_col.options = var_sec.options = cols
+            
+            # Alimenta as listas de opções de ambas as abas
+            x_col.options = y_col.options = var_uni.options = cols
+            var_bi_x.options = var_bi_y.options = cols
+            
+            # Tenta inferir seleções padrões inteligentes
             if 'X' in cols: x_col.value = 'X'
             if 'Y' in cols: y_col.value = 'Y'
-            if len(cols) > 2: var_col.value = cols[2]
-            if len(cols) > 3: var_sec.value = cols[3]
+            if len(cols) > 2: 
+                var_uni.value = cols[2]
+                var_bi_x.value = cols[2]
+            if len(cols) > 3: 
+                var_bi_y.value = cols[3]
             
             geo_state['df'] = df
-            status_text.object = "**Status:** ✅ Dados lidos! Configure as variáveis e clique em Gerar EDA."
+            status_text.object = "**Status:** ✅ Dados lidos! Navegue pelas abas abaixo e gere os gráficos."
         except Exception as e:
             status_text.object = f"**Status:** ❌ Erro: {e}"
     load_btn.on_click(carregar_dados)
 
-    def gerar_graficos(event):
+    def gerar_uni(event):
         if geo_state['df'] is None: return
-        status_text.object = "**Status:** ⏳ Desenhando gráficos..."
+        status_text.object = "**Status:** ⏳ Desenhando Mapa e Histograma..."
         try:
+            # Salva no estado global para o módulo de Variografia acessar depois
             geo_state['x_col'], geo_state['y_col'] = x_col.value, y_col.value
-            geo_state['var_col'], geo_state['var_sec'] = var_col.value, var_sec.value
+            geo_state['var_col'] = var_uni.value
+            
             df = geo_state['df']
-            
-            # Aba 1
-            pane_mapa.object = plots.plot_locmap(df[x_col.value].values, df[y_col.value].values, df[var_col.value].values, title=f"Mapa: {var_col.value}")
-            pane_hist.object = plots.plot_histogram(df[var_col.value].values, title=f"Histograma: {var_col.value}")
-            
-            # Aba 2
-            pane_scatter.object = plots.plot_scatter2d(df[var_col.value].values, df[var_sec.value].values, title="Scatter Plot", x_axis=var_col.value, y_axis=var_sec.value)
-            pane_qq.object = plots.plot_qqplot(df[var_col.value].values, df[var_sec.value].values, title="QQ-Plot", x_axis=var_col.value, y_axis=var_sec.value)
-            
-            status_text.object = "**Status:** ✅ EDA pronta!"
+            pane_mapa.object = plots.plot_locmap(df[x_col.value].values, df[y_col.value].values, df[var_uni.value].values, title=f"Mapa: {var_uni.value}")
+            pane_hist.object = plots.plot_histogram(df[var_uni.value].values, title=f"Histograma: {var_uni.value}")
+            status_text.object = "**Status:** ✅ EDA Univariada pronta!"
         except Exception as e:
-            status_text.object = f"**Status:** ❌ Erro na EDA:\n```\n{traceback.format_exc()}\n```"
-    eda_btn.on_click(gerar_graficos)
+            status_text.object = f"**Status:** ❌ Erro na Univariada:\n```\n{traceback.format_exc()}\n```"
+    btn_uni.on_click(gerar_uni)
 
+    def gerar_bi(event):
+        if geo_state['df'] is None: return
+        status_text.object = "**Status:** ⏳ Desenhando Scatter e QQ-Plot..."
+        try:
+            df = geo_state['df']
+            pane_scatter.object = plots.plot_scatter2d(df[var_bi_x.value].values, df[var_bi_y.value].values, title=f"Scatter: {var_bi_x.value} vs {var_bi_y.value}", x_axis=var_bi_x.value, y_axis=var_bi_y.value)
+            pane_qq.object = plots.plot_qqplot(df[var_bi_x.value].values, df[var_bi_y.value].values, title="QQ-Plot", x_axis=var_bi_x.value, y_axis=var_bi_y.value)
+            status_text.object = "**Status:** ✅ EDA Bivariada pronta!"
+        except Exception as e:
+            status_text.object = f"**Status:** ❌ Erro na Bivariada:\n```\n{traceback.format_exc()}\n```"
+    btn_bi.on_click(gerar_bi)
+
+    # --- Montagem dos Layouts das Abas ---
+    aba_uni = pn.Column(
+        pn.Row(x_col, y_col, var_uni, btn_uni, align='end'),
+        pn.layout.Divider(),
+        pn.Row(pane_mapa, pane_hist)
+    )
+
+    aba_bi = pn.Column(
+        pn.Row(var_bi_x, var_bi_y, btn_bi, align='end'),
+        pn.layout.Divider(),
+        pn.Row(pane_scatter, pane_qq)
+    )
+
+    tabs_eda = pn.Tabs(
+        ('📍 Univariada & Mapa', aba_uni),
+        ('📉 Bivariada (Scatter & QQ)', aba_bi),
+        dynamic=True
+    )
+
+    # --- Layout Final do Módulo ---
     return pn.Column(
         "## 📊 1. Análise Exploratória (EDA)",
         pn.Row(refresh_btn, file_data, load_btn, align='end'),
-        pn.Row(x_col, y_col, var_col, var_sec, eda_btn, align='end'),
-        status_text, pn.layout.Divider(), tabs_eda,
+        status_text, 
+        pn.layout.Divider(), 
+        tabs_eda,
         styles={'background': '#f9f9f9', 'padding': '20px', 'border-radius': '10px'}
     )
 
