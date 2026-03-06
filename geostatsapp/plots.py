@@ -9,6 +9,12 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
+import matplotlib.pyplot as plt
+import matplotlib
+from scipy.interpolate import griddata
+
+matplotlib.use('Agg') # Evita que o Matplotlib tente abrir janelas soltas
+
 # IMPORTA O SEU MÓDULO UTILS OTIMIZADO
 from . import utils
 warnings.filterwarnings('ignore')
@@ -294,16 +300,32 @@ def plot_qqplot(data1, data2, title='QQ-Plot', x_axis='Var 1', y_axis='Var 2', f
     fig.update_layout(title=title, xaxis_title=x_axis, yaxis_title=y_axis, width=figsize[0], height=figsize[1], template="plotly_white")
     return fig
 
-def plot_varmap(df_varmap, title="Variogram Map (Varmap)", figsize=(600, 600)):
-    """Desenha o Varmap de calor baseado em coordenadas cartesianas."""
-    fig = go.Figure(data=go.Contour(
-        x=df_varmap['x'],
-        y=df_varmap['y'],
-        z=df_varmap['valor'],
-        colorscale='Jet', # Paleta clássica da geoestatística
-        contours=dict(coloring='heatmap')
-    ))
-    # scaleanchor='y' garante que o gráfico fique um quadrado/círculo perfeito
-    fig.update_layout(title=title, width=figsize[0], height=figsize[1], template="plotly_white", 
-                      xaxis=dict(scaleanchor='y', title="Leste-Oeste"), yaxis=dict(title="Norte-Sul"))
+def plot_varmap(df_varmap, title="Variogram Map (Varmap)", figsize=(10, 8)):
+    """Gera o Varmap usando projeção polar do Matplotlib (Padrão Ouro Geoestatístico)"""
+    r, theta, z = df_varmap['r'].values, df_varmap['theta'].values, df_varmap['valor'].values
+
+    # Remove NaNs de direções não calculáveis
+    mask = ~np.isnan(z)
+    r, theta, z = r[mask], theta[mask], z[mask]
+
+    # Cria uma grade regular para interpolar e desenhar o mapa de calor
+    ri = np.linspace(0, r.max(), 50)
+    ti = np.linspace(0, 2 * np.pi, 72)
+    R, T = np.meshgrid(ri, ti)
+
+    # Interpola em X, Y cartesianos para não haver "cortes" entre 0 e 360 graus
+    x, y = r * np.sin(theta), r * np.cos(theta)
+    xi, yi = R * np.sin(T), R * np.cos(T)
+    zi = griddata((x, y), z, (xi, yi), method='linear')
+
+    # Configura a Projeção Polar
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection='polar')
+    ax.set_theta_zero_location("N") # Norte = 0 graus
+    ax.set_theta_direction(-1)      # Gira no sentido horário
+
+    cf = ax.contourf(T, R, zi, levels=40, cmap='jet')
+    fig.colorbar(cf, ax=ax, pad=0.1)
+    ax.set_title(title, va='bottom', pad=20)
+    plt.close(fig) # Fecha para enviar apenas a figura ao Panel
     return fig
