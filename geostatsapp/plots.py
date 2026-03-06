@@ -308,6 +308,10 @@ def plot_varmap(df_varmap, title="Variogram Map (Varmap)", figsize=(10, 8)):
     mask = ~np.isnan(z)
     r, theta, z = r[mask], theta[mask], z[mask]
 
+    # --- CORREÇÃO AQUI: Trava de segurança para interpolação ---
+    if len(r) < 4:
+        raise ValueError(f"Pontos insuficientes para o Varmap (encontrados apenas {len(r)}). Aumente o 'Lag Size' ou a 'Tol. Azim'.")
+
     # Cria uma grade regular para interpolar e desenhar o mapa de calor
     ri = np.linspace(0, r.max(), 50)
     ti = np.linspace(0, 2 * np.pi, 72)
