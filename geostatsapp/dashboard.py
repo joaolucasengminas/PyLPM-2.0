@@ -198,7 +198,7 @@ def renderizar_variografia():
     pane_var = pn.pane.Plotly(sizing_mode="stretch_both", min_height=450)
     pane_varmap = pn.pane.Matplotlib(sizing_mode="stretch_both", min_height=700, tight=True)
     pane_hscat = pn.pane.Plotly(sizing_mode="stretch_both", min_height=600)
-
+    
     # --- Callbacks ---
     @pn.depends(mod_nugget.param.value_throttled, mod_azm.param.value_throttled, mod_s1_type, mod_s1_cc.param.value_throttled, mod_s1_a_max.param.value_throttled, mod_s1_a_min.param.value_throttled, enable_model, watch=True)
     def atualizar_plot_teorico(*args):
@@ -207,18 +207,15 @@ def renderizar_variografia():
         if not df_exp_list: return
         
         controles_teoricos.visible = enable_model.value
-        
-        # Redesenha todos os variogramas experimentais primeiro
         fig = plots.plot_experimental_variogram(df_exp_list, azm_list, [0.0]*len(azm_list))
         
-        # Injeta as curvas teóricas projetadas em cada subplot
         if enable_model.value:
             count_row, count_cols = 1, 1
             for i, (df_exp, azm_plot) in enumerate(zip(df_exp_list, azm_list)):
                 df_teorico = variografia.calcular_modelo_teorico(
                     experimental_dataframe=df_exp, azimuth=azm_plot, dip=0.0, 
                     rotation_reference=[mod_azm.value, 0, 0], model_func=[mod_s1_type.value], 
-                    ranges=[[mod_s1_a_max.value, mod_s1_a_min.value, mod_s1_a_max.value]], # Y(Max), X(Min), Z
+                    ranges=[[mod_s1_a_max.value, mod_s1_a_min.value, mod_s1_a_max.value]], 
                     contribution=[mod_s1_cc.value], nugget=mod_nugget.value, inverted=False
                 )
                 fig.add_trace(go.Scatter(x=df_teorico['distances'], y=df_teorico['model'], mode='lines', name=f'Teórico {azm_plot}°', line=dict(color='red', width=3)), row=count_row, col=count_cols)
@@ -229,19 +226,17 @@ def renderizar_variografia():
         pane_var.object = fig
 
     def btn_calc_var(event):
-        # --- TRAVA DE SEGURANÇA ---
-        if geo_state['df'] is None or geo_state['x_col'] is None: 
-            status_var.object = "⚠️ **Aviso:** Volte na Aba 1, carregue o dataset e certifique-se de que as coordenadas X e Y estão selecionadas!"
+        # TRAVA DE SEGURANÇA 1
+        if geo_state['df'] is None or not geo_state['x_col'] or not geo_state['y_col'] or not geo_state['var_col']:
+            status_var.object = "⚠️ **Aviso:** Volte na Aba 1 (EDA) e certifique-se de que X, Y e a Variável Principal estão selecionadas!"
             return
             
         status_var.object = "⏳ Calculando Variogramas..."
-        # ... (resto do seu código continua igual)
-            
-            # Interpreta a lista de azimutes do usuário
+        try:
+            df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
             azm_list = [float(a.strip()) for a in azm_input.value.split(',')]
             ndir = len(azm_list)
             
-            # Executa N direções de uma vez!
             res = variografia.experimental(
                 df.copy(), x, y, v, v, [type_var.value]*ndir, [nlag.value]*ndir, [xlag.value]*ndir, 
                 [xlag.value/2.0]*ndir, [atol.value]*ndir, [90.0]*ndir, [bandwh.value]*ndir, 
@@ -250,28 +245,27 @@ def renderizar_variografia():
             geo_state['df_exp_list'] = res['Values']
             geo_state['azm_list'] = azm_list
             
-            # --- CORREÇÃO AQUI: Filtra apenas os DataFrames que não estão vazios ---
             valid_dfs = [d for d in geo_state['df_exp_list'] if not d.empty]
-            
-            # Se a lista de DFs válidos estiver vazia, avisa o usuário e aborta o desenho
             if not valid_dfs:
-                status_var.object = "⚠️ Nenhum par encontrado! Revise o tamanho do Lag (Lag Size) ou as Tolerâncias."
+                status_var.object = "⚠️ Nenhum par encontrado! Revise o tamanho do Lag ou as Tolerâncias."
                 return
             
-            # Atualiza os limites dos sliders baseado no maior variograma válido
             max_g = max([d['Spatial continuity'].max() for d in valid_dfs])
             max_d = max([d['Average distance'].max() for d in valid_dfs])
-            
             mod_nugget.end, mod_s1_cc.end = float(max_g*1.5), float(max_g*1.5)
             mod_s1_a_max.end, mod_s1_a_min.end = float(max_d*1.5), float(max_d*1.5)
             
             atualizar_plot_teorico()
             status_var.object = "✅ Múltiplos Variogramas calculados!"
-        except Exception as e: 
-            status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
+        except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
+    run_var_btn.on_click(btn_calc_var)
 
     def btn_calc_varmap(event):
-        if geo_state['df'] is None: return
+        # TRAVA DE SEGURANÇA 2
+        if geo_state['df'] is None or not geo_state['x_col'] or not geo_state['y_col'] or not geo_state['var_col']:
+            status_var.object = "⚠️ **Aviso:** Volte na Aba 1 (EDA) e certifique-se de que X, Y e a Variável Principal estão selecionadas!"
+            return
+            
         status_var.object = "⏳ Varrendo 360º para o Varmap (Isso pode levar alguns segundos)..."
         try:
             df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
@@ -283,28 +277,42 @@ def renderizar_variografia():
     run_varmap_btn.on_click(btn_calc_varmap)
 
     def btn_calc_hscat(event):
-        if geo_state['df'] is None: return
+        # TRAVA DE SEGURANÇA 3
+        if geo_state['df'] is None or not geo_state['x_col'] or not geo_state['y_col'] or not geo_state['var_col']:
+            status_var.object = "⚠️ **Aviso:** Volte na Aba 1 (EDA) e certifique-se de que X, Y e a Variável Principal estão selecionadas!"
+            return
+            
         status_var.object = "⏳ Extraindo pares para o H-Scatterplot..."
         try:
-            # Pega o primeiro Azimute da lista para o H-scatter
             azm_ref = float(azm_input.value.split(',')[0].strip())
             df, x, y, v = geo_state['df'], geo_state['x_col'], geo_state['y_col'], geo_state['var_col']
+            
+            # Executa o cálculo para a direção principal
             h_data = variografia.calcular_hscatter_data(df.copy(), x, y, v, v, nlag.value, xlag.value, xlag.value/2.0, atol.value, 90.0, bandwh.value, 1000.0, azm_ref, 0.0, omni_check.value, Z=None)
             
-            # Filtra apenas os lags que o usuário pediu!
-            try: lags_to_plot = [int(l.strip()) for l in lags_hscat.value.split(',')]
-            except: lags_to_plot = [1, 2, 3] 
+            try: 
+                lags_to_plot = [int(l.strip()) for l in lags_hscat.value.split(',')]
+            except: 
+                lags_to_plot = [1, 2, 3] 
             
             store, lagmult = [], []
             for i in lags_to_plot:
                 lk = f'Lag_{i}'
-                if lk in h_data and h_data[lk]['n_pares'] > 0:
+                # CORREÇÃO: Garante que existam pelo menos 2 pares para a regressão linear funcionar
+                if lk in h_data and h_data[lk]['n_pares'] > 1:
                     store.append([h_data[lk]['head'], h_data[lk]['tail']])
                     lagmult.append(i)
-                    
+            
+            # --- TRAVA DE SEGURANÇA: Se não encontrou pares nos lags solicitados ---
+            if not store:
+                status_var.object = f"⚠️ Nenhum par válido encontrado para os lags {lags_to_plot} no azimute {azm_ref}°. Tente lags menores ou aumente as tolerâncias."
+                return
+                
             pane_hscat.object = plots.plot_hscat(store, xlag.value, lagmult)
             status_var.object = f"✅ H-Scatter gerado para o Azimute {azm_ref}°!"
-        except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
+            
+        except Exception as e: 
+            status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
     run_hscat_btn.on_click(btn_calc_hscat)
 
     # Sub-abas da Variografia
