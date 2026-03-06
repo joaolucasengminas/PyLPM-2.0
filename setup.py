@@ -12,7 +12,8 @@ setup(
         'numba',
         'scipy',
         'plotly',
-        'panel'
+        'panel',
+        'jupyter_bokeh' 
     ],
     python_requires='>=3.8',
 )
