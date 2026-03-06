@@ -276,3 +276,35 @@ def plot_swath_plots(x, y, z, point_var, grid_dic, grid_var, n_bins=10):
 
     fig.update_layout(title="Swath Plots (Drift Validation)", height=700, template="plotly_white")
     return fig
+def plot_qqplot(data1, data2, title='QQ-Plot', x_axis='Var 1', y_axis='Var 2', figsize=(500, 500)):
+    """Gera um gráfico de Quantil-Quantil para comparar duas variáveis."""
+    data1, data2 = np.asarray(data1), np.asarray(data2)
+    data1, data2 = data1[~np.isnan(data1)], data2[~np.isnan(data2)]
+    
+    # Calcula os decis/percentis (100 quebras)
+    q = np.linspace(0, 1, 100)
+    q1 = np.quantile(data1, q)
+    q2 = np.quantile(data2, q)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=q1, y=q2, mode='markers', name='QQ', marker=dict(color='#1f77b4')))
+    
+    min_val, max_val = min(min(q1), min(q2)), max(max(q1), max(q2))
+    fig.add_trace(go.Scatter(x=[min_val, max_val], y=[min_val, max_val], mode='lines', name='Referência (x=y)', line=dict(dash='dot', color='red')))
+    
+    fig.update_layout(title=title, xaxis_title=x_axis, yaxis_title=y_axis, width=figsize[0], height=figsize[1], template="plotly_white")
+    return fig
+
+def plot_varmap(df_varmap, title="Variogram Map (Varmap)", figsize=(600, 600)):
+    """Desenha o Varmap de calor baseado em coordenadas cartesianas."""
+    fig = go.Figure(data=go.Contour(
+        x=df_varmap['x'],
+        y=df_varmap['y'],
+        z=df_varmap['valor'],
+        colorscale='Jet', # Paleta clássica da geoestatística
+        contours=dict(coloring='heatmap')
+    ))
+    # scaleanchor='y' garante que o gráfico fique um quadrado/círculo perfeito
+    fig.update_layout(title=title, width=figsize[0], height=figsize[1], template="plotly_white", 
+                      xaxis=dict(scaleanchor='y', title="Leste-Oeste"), yaxis=dict(title="Norte-Sul"))
+    return fig
