@@ -10,7 +10,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 # IMPORTA O SEU MÓDULO UTILS OTIMIZADO
-import utils 
+from . import utils 
 
 warnings.filterwarnings('ignore')
 
