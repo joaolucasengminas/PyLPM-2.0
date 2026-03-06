@@ -231,16 +231,25 @@ def renderizar_variografia():
             geo_state['df_exp_list'] = res['Values']
             geo_state['azm_list'] = azm_list
             
-            # Atualiza os limites dos sliders baseado no maior variograma
-            max_g = max([d['Spatial continuity'].max() for d in geo_state['df_exp_list'] if not d.empty])
-            max_d = max([d['Average distance'].max() for d in geo_state['df_exp_list'] if not d.empty])
+            # --- CORREÇÃO AQUI: Filtra apenas os DataFrames que não estão vazios ---
+            valid_dfs = [d for d in geo_state['df_exp_list'] if not d.empty]
+            
+            # Se a lista de DFs válidos estiver vazia, avisa o usuário e aborta o desenho
+            if not valid_dfs:
+                status_var.object = "⚠️ Nenhum par encontrado! Revise o tamanho do Lag (Lag Size) ou as Tolerâncias."
+                return
+            
+            # Atualiza os limites dos sliders baseado no maior variograma válido
+            max_g = max([d['Spatial continuity'].max() for d in valid_dfs])
+            max_d = max([d['Average distance'].max() for d in valid_dfs])
+            
             mod_nugget.end, mod_s1_cc.end = float(max_g*1.5), float(max_g*1.5)
             mod_s1_a_max.end, mod_s1_a_min.end = float(max_d*1.5), float(max_d*1.5)
             
             atualizar_plot_teorico()
             status_var.object = "✅ Múltiplos Variogramas calculados!"
-        except Exception as e: status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
-    run_var_btn.on_click(btn_calc_var)
+        except Exception as e: 
+            status_var.object = f"❌ Erro:\n```\n{traceback.format_exc()}\n```"
 
     def btn_calc_varmap(event):
         if geo_state['df'] is None: return
