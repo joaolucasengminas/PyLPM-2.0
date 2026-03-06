@@ -7,9 +7,9 @@ import logging
 import warnings
 
 # Nossas bibliotecas
-import gslib
-import plots
-import variografia
+from . import gslib
+from . import plots
+from . import variografia
 
 warnings.filterwarnings('ignore')
 logging.getLogger('bokeh').setLevel(logging.ERROR)
