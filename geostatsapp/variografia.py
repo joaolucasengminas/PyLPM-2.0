@@ -326,10 +326,6 @@ def calcular_hscatter_data(dataset, X, Y, head, tail, nlags, lagsize, lineartol,
     return hscatter_data
 
 def calcular_varmap_data(dataset, X, Y, head, tail, type_c, nlags, lagsize, lineartol, htol, vtol, hband, vband, dip=0.0, step_angulo=15, Z=None, choice=1.0, flipped=False):
-    """
-    Roda a variografia em 360 graus e converte para coordenadas cartesianas X,Y
-    preparando os dados para plotagem de um mapa de contorno (Varmap).
-    """
     if Z is None:
         dataset_copy = dataset.copy()
         dataset_copy['Z'] = np.zeros(dataset_copy[X].values.shape[0])
@@ -337,40 +333,27 @@ def calcular_varmap_data(dataset, X, Y, head, tail, type_c, nlags, lagsize, line
     else:
         dataset_copy = dataset
         
-    x_coords = []
-    y_coords = []
-    z_values = [] # Valores de continuidade espacial
+    r_coords = []
+    theta_coords = []
+    z_values = []
     
-    # Roda de 0 até 360 graus, saltando conforme o step (ex: de 15 em 15 graus)
     for azm in range(0, 360, step_angulo):
         df_exp = _calculate_experimental_function(
             dataset_copy, X, Y, Z, type_c, lagsize, lineartol, htol, vtol, 
             hband, vband, azm, dip, nlags, head, tail, choice, omni=False, flipped=flipped
         )
-        
         if not df_exp.empty:
             lags_dist = df_exp['Average distance'].values
             valores = df_exp['Spatial continuity'].values
             
-            # Converte a coordenada Polar (Distância, Ângulo) para Cartesiana (X, Y)
-            # Obs: Multiplicamos por sin e cos de acordo com a regra de azimute norte (0)
-            azm_rad = np.radians(azm)
-            x_calc = lags_dist * np.sin(azm_rad)
-            y_calc = lags_dist * np.cos(azm_rad)
-            
-            x_coords.extend(x_calc)
-            y_coords.extend(y_calc)
+            # Exporta Raio e Theta (em radianos) para o mapa polar
+            r_coords.extend(lags_dist)
+            theta_coords.extend(np.full(len(lags_dist), np.radians(azm)))
             z_values.extend(valores)
             
-    # Adiciona o ponto (0,0) com valor de variância 0 para o centro do alvo
-    x_coords.append(0.0)
-    y_coords.append(0.0)
-    z_values.append(0.0 if not flipped else 1.0) # Se for correlograma flipped, centro é 1.0
+    # Centro (Distância 0)
+    r_coords.append(0.0)
+    theta_coords.append(0.0)
+    z_values.append(0.0 if not flipped else 1.0) 
     
-    df_varmap = pd.DataFrame({
-        'x': x_coords,
-        'y': y_coords,
-        'valor': z_values
-    })
-    
-    return df_varmap
+    return pd.DataFrame({'r': r_coords, 'theta': theta_coords, 'valor': z_values})
