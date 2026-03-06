@@ -40,7 +40,7 @@ def isotopic_arrays(arrays):
 # FÁBRICA DE GRÁFICOS (Retornam objetos go.Figure para o Panel)
 # ==============================================================================
 
-def plot_experimental_variogram(dfs, azm, dip):
+def plot_experimental_variogram(dfs, azm, dip, show_lines=True):
     """Plota uma grade de variogramas experimentais."""
     size_row = 1 if len(azm) < 4 else int(math.ceil(len(azm)/4))
     size_cols = 4 if len(azm) >= 4 else int(len(azm))
@@ -49,13 +49,20 @@ def plot_experimental_variogram(dfs, azm, dip):
     fig = make_subplots(rows=size_row, cols=size_cols, subplot_titles=titles)
 
     count_row, count_cols = 1, 1
+    
+    # Define se plota linhas + marcadores + texto, ou apenas marcadores + texto
+    plot_mode = 'markers+lines+text' if show_lines else 'markers+text'
 
     for i in dfs:
         fig.add_trace(go.Scatter(
             x=i['Average distance'], y=i['Spatial continuity'],
-            mode='markers+lines', name='Experimental',
-            marker=dict(color=i['Number of pairs'], colorscale='Viridis', showscale=False),
-            text=i['Number of pairs'], textposition='bottom center'
+            mode=plot_mode, 
+            name='Experimental',
+            marker=dict(color='#1f77b4', size=8), # Cor sólida e sem atributo colorscale
+            text=i['Number of pairs'], 
+            textposition='top center', # Posiciona o número acima do ponto
+            textfont=dict(size=10, color='black'),
+            showlegend=False # Evita dezenas de legendas repetidas na direita
         ), row=count_row, col=count_cols)
         
         fig.update_xaxes(title_text="Distance", row=count_row, col=count_cols)
@@ -66,7 +73,7 @@ def plot_experimental_variogram(dfs, azm, dip):
             count_cols = 1
             count_row += 1
             
-    fig.update_layout(template="plotly_white", height=300*size_row)
+    fig.update_layout(template="plotly_white", height=350*size_row)
     return fig
 
 def plot_hscat(store, lagsize, lagmultiply, figsize=(800, 800)):
