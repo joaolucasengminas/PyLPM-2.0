@@ -54,7 +54,7 @@ def plot_experimental_variogram(dfs, azm, dip):
         fig.add_trace(go.Scatter(
             x=i['Average distance'], y=i['Spatial continuity'],
             mode='markers+lines', name='Experimental',
-            marker=dict(color=i['Number of pairs'], colorscale='Viridis', showscale=True),
+            marker=dict(color=i['Number of pairs'], colorscale='Viridis', showscale=False),
             text=i['Number of pairs'], textposition='bottom center'
         ), row=count_row, col=count_cols)
         
@@ -171,7 +171,7 @@ def plot_histogram(data, n_bins=20, wt=None, title='Histogram', x_axis='Value', 
     )
     return fig
 
-def plot_scatter2d(x, y, variable='kernel density', xy_line=True, best_fit_line=True, title='Scatter Plot', x_axis='X', y_axis='Y', pointsize=8, colorscale='Viridis', colorbartitle='', figsize=(600, 600)):
+def plot_scatter2d(x, y, variable='kernel density', xy_line=True, best_fit_line=True, title='Scatter Plot', x_axis='X', y_axis='Y', pointsize=8, colorscale='Viridis', colorbartitle='', figsize=(800, 800)):
     """Gráfico de dispersão 2D com regressão linear."""
     x = np.where(x == -999.0, float('nan'), x)
     y = np.where(y == -999.0, float('nan'), y)
@@ -284,7 +284,7 @@ def plot_swath_plots(x, y, z, point_var, grid_dic, grid_var, n_bins=10):
 
     fig.update_layout(title="Swath Plots (Drift Validation)", height=700, template="plotly_white")
     return fig
-def plot_qqplot(data1, data2, title='QQ-Plot', x_axis='Var 1', y_axis='Var 2', figsize=(500, 500)):
+def plot_qqplot(data1, data2, title='QQ-Plot', x_axis='Var 1', y_axis='Var 2', figsize=(800, 800)):
     """Gera um gráfico de Quantil-Quantil para comparar duas variáveis."""
     data1, data2 = np.asarray(data1), np.asarray(data2)
     data1, data2 = data1[~np.isnan(data1)], data2[~np.isnan(data2)]
