@@ -166,7 +166,7 @@ def renderizar_variografia():
     xlag = pn.widgets.FloatInput(name='Lag Size', value=10.0, start=0.1, width=100)
     
     # A MÁGICA: Múltiplos Azimutes separados por vírgula!
-    azm_input = pn.widgets.TextInput(name='Azimutes (ex: 0, 45, 90)', value='0, 90', width=180)
+    azm_input = pn.widgets.TextInput(name='Azimutes (ex: 0, 45, 90)', value='0', width=180)
     
     atol = pn.widgets.FloatInput(name='Tol. Azim', value=22.5, start=0.0, end=90.0, width=100)
     bandwh = pn.widgets.FloatInput(name='Bandwidth', value=1000.0, start=0.0, width=100)
@@ -183,6 +183,7 @@ def renderizar_variografia():
 
     # 2. Widgets Teóricos (Adicionado Anisotropia para Projetar as Curvas)
     enable_model = pn.widgets.Checkbox(name='Habilitar Modelo Teórico', value=False)
+    show_lines_check = pn.widgets.Checkbox(name='Mostrar Linhas do Experimental', value=True) # <-- NOVO CHECKBOX    
     mod_nugget = pn.widgets.FloatSlider(name='Efeito Pepita (C0)', start=0.0, end=1.0, value=0.0, step=0.01)
     mod_azm = pn.widgets.FloatSlider(name='Azimute Maior Continuidade', start=0.0, end=360.0, value=0.0, step=1.0)
     mod_s1_type = pn.widgets.Select(name='Estrutura 1', options=['Spherical', 'Exponential', 'Gaussian'], value='Spherical', width=120)
@@ -200,14 +201,17 @@ def renderizar_variografia():
     pane_hscat = pn.pane.Plotly(sizing_mode="stretch_both", min_height=600)
     
     # --- Callbacks ---
-    @pn.depends(mod_nugget.param.value_throttled, mod_azm.param.value_throttled, mod_s1_type, mod_s1_cc.param.value_throttled, mod_s1_a_max.param.value_throttled, mod_s1_a_min.param.value_throttled, enable_model, watch=True)
+    # --- Adicione o show_lines_check no decorador @pn.depends ---
+    @pn.depends(mod_nugget.param.value_throttled, mod_azm.param.value_throttled, mod_s1_type, mod_s1_cc.param.value_throttled, mod_s1_a_max.param.value_throttled, mod_s1_a_min.param.value_throttled, enable_model, show_lines_check, watch=True)
     def atualizar_plot_teorico(*args):
         df_exp_list = geo_state.get('df_exp_list')
         azm_list = geo_state.get('azm_list')
         if not df_exp_list: return
         
         controles_teoricos.visible = enable_model.value
-        fig = plots.plot_experimental_variogram(df_exp_list, azm_list, [0.0]*len(azm_list))
+        
+        # --- Passe o valor do checkbox para a função atualizada ---
+        fig = plots.plot_experimental_variogram(df_exp_list, azm_list, [0.0]*len(azm_list), show_lines=show_lines_check.value)
         
         if enable_model.value:
             count_row, count_cols = 1, 1
@@ -224,7 +228,7 @@ def renderizar_variografia():
                 if count_cols > 4: count_cols = 1; count_row += 1
                 
         pane_var.object = fig
-
+        
     def btn_calc_var(event):
         # TRAVA DE SEGURANÇA 1
         if geo_state['df'] is None or not geo_state['x_col'] or not geo_state['y_col'] or not geo_state['var_col']:
@@ -317,12 +321,12 @@ def renderizar_variografia():
 
     # Sub-abas da Variografia
     tabs_var = pn.Tabs(
-        ('📈 Múltiplos Variogramas', pn.Column(run_var_btn, enable_model, controles_teoricos, pane_var)),
+        # --- Adicionamos o show_lines_check na mesma coluna do enable_model ---
+        ('📈 Múltiplos Variogramas', pn.Column(run_var_btn, pn.Row(enable_model, show_lines_check), controles_teoricos, pane_var)),
         ('🎯 Varmap', pn.Column(pn.Row(step_varmap, run_varmap_btn), pane_varmap)),
         ('☁️ H-Scatter', pn.Column(pn.Row(lags_hscat, run_hscat_btn), pane_hscat)),
         dynamic=True
     )
-
     return pn.Column(
         "## 📈 2. Continuidade Espacial",
         pn.Row(type_var, nlag, xlag, azm_input, atol, bandwh),
